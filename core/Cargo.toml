@@ -1,0 +1,29 @@
+[package]
+name = "signer-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "no_std core shared by the signer-router and hardware wallet firmware: SSZ signing roots, EIP-3076 slashing protection, EIP-2333/2334 key derivation, BLS12-381 signing"
+
+[features]
+default = ["bls"]
+# BLS12-381 signing via blst (min_pk). blst itself compiles as no_std
+# (`#![cfg_attr(not(feature = "std"), no_std)]`, no std feature exists), but
+# its build script compiles C and links libc, so bare-metal targets need a C
+# toolchain for that target. Disable this feature to build without it.
+bls = ["dep:blst"]
+
+[dependencies]
+sha2 = { workspace = true }
+hmac = { workspace = true }
+zeroize = { workspace = true }
+blst = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Differential testing against sigp's reference implementation (std only).
+tree_hash = "0.12"
+tree_hash_derive = "0.12"
+proptest = "1"
+ssz_types = "0.14.1"
+typenum = "1.20.1"
