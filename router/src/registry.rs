@@ -18,7 +18,7 @@ use crate::state::{AppState, DeviceId};
 pub enum DeviceBackend {
     /// Deterministic fake signatures (NOT CRYPTOGRAPHIC) — the default.
     Mock,
-    /// Trezor/Speculos emulators — not implemented yet.
+    /// A board emulator — not implemented yet.
     Emulator,
 }
 
@@ -27,7 +27,7 @@ pub enum DeviceBackend {
 /// The file must be a flat map of public key → device id, e.g.
 ///
 /// ```toml
-/// "0x<48-byte pubkey as 0x-hex>" = "trezor-1"
+/// "0x<48-byte pubkey as 0x-hex>" = "board-1"
 /// ```
 ///
 /// or the same shape as JSON. The format is picked from the file extension

@@ -127,7 +127,7 @@ async fn upcheck_returns_ok() {
 
 #[tokio::test]
 async fn public_keys_lists_registry_sorted() {
-    let app = mock_app(&[(test_key(1), "trezor-1"), (test_key(0), "ledger-1")]);
+    let app = mock_app(&[(test_key(1), "board-1"), (test_key(0), "board-2")]);
     let (status, content_type, body) = send(
         app,
         Request::builder()
@@ -163,7 +163,7 @@ async fn public_keys_empty_registry() {
 #[tokio::test]
 async fn sign_happy_path_json() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, content_type, body) = send(
         app,
         Request::builder()
@@ -190,7 +190,7 @@ async fn sign_happy_path_json() {
 #[tokio::test]
 async fn sign_text_plain_accept_returns_bare_signature() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, content_type, body) = send(
         app,
         Request::builder()
@@ -213,7 +213,7 @@ async fn sign_text_plain_accept_returns_bare_signature() {
 
 #[tokio::test]
 async fn sign_unknown_key_is_404() {
-    let app = mock_app(&[(test_key(7), "trezor-1")]);
+    let app = mock_app(&[(test_key(7), "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()
@@ -230,7 +230,7 @@ async fn sign_unknown_key_is_404() {
 #[tokio::test]
 async fn sign_malformed_json_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()
@@ -247,7 +247,7 @@ async fn sign_malformed_json_is_400() {
 #[tokio::test]
 async fn sign_unknown_type_tag_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()
@@ -264,7 +264,7 @@ async fn sign_unknown_type_tag_is_400() {
 #[tokio::test]
 async fn sign_bad_fork_info_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()
@@ -532,7 +532,7 @@ fn aggregate_v2_body(version: &str) -> String {
 #[tokio::test]
 async fn block_v2_electra_and_fulu_header_form_is_accepted() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     for version in ["ELECTRA", "FULU", "GLOAS"] {
         let (status, _, _) = send(
             app.clone(),
@@ -551,7 +551,7 @@ async fn block_v2_electra_and_fulu_header_form_is_accepted() {
 #[tokio::test]
 async fn block_v2_unknown_version_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()
@@ -568,7 +568,7 @@ async fn block_v2_unknown_version_is_400() {
 #[tokio::test]
 async fn block_v2_wrong_payload_form_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     // ELECTRA must use block_header, not a full block.
     let body = serde_json::json!({
         "type": "BLOCK_V2",
@@ -592,7 +592,7 @@ async fn block_v2_wrong_payload_form_is_400() {
 #[tokio::test]
 async fn aggregate_and_proof_v2_known_versions_are_accepted() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     for version in [
         "PHASE0",
         "ALTAIR",
@@ -619,7 +619,7 @@ async fn aggregate_and_proof_v2_known_versions_are_accepted() {
 #[tokio::test]
 async fn aggregate_and_proof_v2_unknown_version_is_400() {
     let key = test_key(7);
-    let app = mock_app(&[(key, "trezor-1")]);
+    let app = mock_app(&[(key, "board-1")]);
     let (status, _, _) = send(
         app,
         Request::builder()

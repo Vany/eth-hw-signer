@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Web3Signer-compatible remote signer that routes eth2 signing duties to hardware wallets"
+description = "Web3Signer-compatible remote signer that routes eth2 signing duties to signing boards (STM32U5)"
 
 [[bin]]
 name = "signer-router"

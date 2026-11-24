@@ -11,7 +11,7 @@ use crate::registry::DeviceBackend;
 #[command(
     name = "signer-router",
     version,
-    about = "Web3Signer-compatible remote signer backed by hardware wallets"
+    about = "Web3Signer-compatible remote signer host service for STM32U5 signing boards (today: mock backend only)"
 )]
 pub struct Cli {
     /// Address for the HTTP server to listen on.

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use signer_device::{DeviceClient, PublicKey};
 
-/// A device identifier from the key-map file (e.g. `trezor-1`).
+/// A device identifier from the key-map file (e.g. `board-1`).
 pub type DeviceId = String;
 
 /// Immutable state shared by all request handlers.
