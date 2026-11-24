@@ -97,6 +97,25 @@ A Discovery kit costs about $90. At ~100 validators per board that is under $1 o
 - [ ] 30 days of live duties on Hoodi
 - [ ] First signed reproducible release
 
+## Host service: what is in this repository
+
+The host side, in Rust. It does not talk to a board yet: today the signing backends are a mock and a software device for tests.
+
+| Crate | What it is |
+|---|---|
+| `core` (`signer-core`) | `no_std` signing core shared with the future firmware: SSZ signing roots, signing domains, EIP-2333/2334 key derivation, EIP-3076 slashing rules, BLS12-381 signing via `blst` |
+| `device` (`signer-device`) | Remote-signing API v1.4 request types, fork schedules (mainnet, Sepolia, Hoodi), the `DeviceClient` trait and backends: `mock` (deterministic, not cryptographic), `soft` (real BLS with keys in plain memory, **testing only**), `emulator` (stub) |
+| `router` (`signer-router`) | The HTTP service: `GET /upcheck`, `GET /api/v1/eth2/publicKeys`, `POST /api/v1/eth2/sign/{identifier}` |
+
+Build and test (stable Rust; `blst` needs a C compiler):
+
+```sh
+cargo test --workspace
+cargo run -p signer-router -- --help
+```
+
+`signer-router --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. The binary can only serve the `mock` backend today, which returns fake signatures: it is for wiring tests against a validator client, not for real duties. The `soft` device is used by the test suite; never give it real validator keys.
+
 ## Limits
 
 - The boundary is a general-purpose security microcontroller, not a certified secure element running our code. It stops a remote attacker on the host, not a lab with hands on a running board. Racks should be locked. There is no remote attestation.
