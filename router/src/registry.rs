@@ -16,7 +16,7 @@ use crate::state::{AppState, DeviceId};
 /// Which device backend to instantiate for the ids in the key map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DeviceBackend {
-    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC) — the default.
+    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC); logs a warning at startup.
     Mock,
     /// A board emulator — not implemented yet.
     Emulator,

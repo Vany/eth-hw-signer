@@ -9,7 +9,7 @@ use tracing_subscriber::EnvFilter;
 
 use signer_router::api;
 use signer_router::config::Cli;
-use signer_router::registry::load_state;
+use signer_router::registry::{load_state, DeviceBackend};
 use signer_router::state::AppState;
 
 #[tokio::main]
@@ -21,6 +21,10 @@ async fn main() -> ExitCode {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
+
+    if cli.device_backend == DeviceBackend::Mock {
+        tracing::warn!("backend=mock: signatures are FAKE");
+    }
 
     let state = match build_state(&cli) {
         Ok(state) => state,

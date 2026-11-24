@@ -24,7 +24,8 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub key_map: Option<PathBuf>,
 
-    /// Which device backend serves the ids in the key map.
-    #[arg(long, value_enum, default_value_t = DeviceBackend::Mock)]
+    /// Which device backend serves the ids in the key map. Required, so that
+    /// nobody runs the mock (fake signatures) without asking for it.
+    #[arg(long, value_enum)]
     pub device_backend: DeviceBackend,
 }
