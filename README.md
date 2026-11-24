@@ -1,5 +1,7 @@
 # eth-hw-signer
 
+[![CI](https://github.com/Vany/eth-hw-signer/actions/workflows/ci.yml/badge.svg)](https://github.com/Vany/eth-hw-signer/actions/workflows/ci.yml)
+
 **Open firmware that keeps Ethereum validator keys on a locked STM32U5 board, behind the standard remote-signing API.**
 
 The host can be fully compromised and still not get a validator key or a slashable signature.
@@ -85,7 +87,7 @@ A Discovery kit costs about $90. At ~100 validators per board that is under $1 o
 **Done**
 - Internal specification: architecture, device protocol, slashing protection, threat model.
 - Host service: remote-signing API endpoints, signing core with EIP-2333/2334 derivation, EIP-3076 rules, Electra types; 123 tests passing.
-- Firmware proof of concept: BLS signing in a hardware-wallet emulator, matching our signing core and an independent reference (signing path only).
+- Firmware proof of concept: BLS signing in an emulator, matching our signing core and an independent reference (signing path only).
 - Software model of the two-site scheme: two simulated boards, the arbiter, real BLS signatures, an independent slashing checker.
 
 **Simulation results so far.** Across 26 failure and attack scenarios (site loss, split brain, power loss, compromised hosts and arbiter, chaos runs), the model produced no slashable pair where none should exist. It also found a gap we had missed: an arbiter restored from an old backup can forget a vote it already gave. The fix, that a restarted arbiter does not vote in the current or the next term, is in the model and passes. Mutation testing showed which guards the scenarios really exercise, and the tests are being tightened accordingly.
