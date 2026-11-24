@@ -114,7 +114,7 @@ cargo test --workspace
 cargo run -p signer-router -- --help
 ```
 
-`signer-router --device-backend mock --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. `--device-backend` is required. The only working backend today is `mock`, which returns fake signatures and says so in the log (`WARN backend=mock: signatures are FAKE`): it is for wiring tests against a validator client, not for real duties. The `soft` device is used by the test suite; never give it real validator keys.
+`signer-router --device-backend mock --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. `--device-backend` is required. The only working backend today is `mock`, which returns fake signatures and says so in the log (`WARN backend=mock: signatures are FAKE`): it is for wiring tests against a validator client, not for real duties. The mock has no slashing protection. The `soft` device is used by the test suite; never give it real validator keys.
 
 ## Limits
 
