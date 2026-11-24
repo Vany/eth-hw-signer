@@ -109,11 +109,18 @@ The host side, in Rust. It does not talk to a board yet: today the signing backe
 | `device` (`signer-device`) | Remote-signing API v1.4 request types, fork schedules (mainnet, Sepolia, Hoodi), the `DeviceClient` trait and backends: `mock` (deterministic, not cryptographic), `soft` (real BLS with keys in plain memory, **testing only**), `emulator` (stub) |
 | `router` (`signer-router`) | The HTTP service: `GET /upcheck`, `GET /api/v1/eth2/publicKeys`, `POST /api/v1/eth2/sign/{identifier}` |
 
-Build and test (stable Rust; `blst` needs a C compiler):
+Build and test (Rust 1.100.0, pinned in `rust-toolchain.toml`; `blst` needs a C compiler):
 
 ```sh
 cargo test --workspace
 cargo run -p signer-router -- --help
+```
+
+The same environment CI uses is a Docker image, built once from `docker/dev.Dockerfile` and rebuilt only when that file or `rust-toolchain.toml` changes. It has the pinned Rust, the Cortex-M33 target (`thumbv8m.main-none-eabihf`) and `arm-none-eabi-gcc`. To run in it:
+
+```sh
+scripts/dev.sh                                    # cargo test --workspace --locked
+scripts/dev.sh cargo build -p signer-core --target thumbv8m.main-none-eabihf
 ```
 
 `signer-router --device-backend mock --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. `--device-backend` is required. The only working backend today is `mock`, which returns fake signatures and says so in the log (`WARN backend=mock: signatures are FAKE`): it is for wiring tests against a validator client, not for real duties. The mock has no slashing protection. The `soft` device is used by the test suite; never give it real validator keys.

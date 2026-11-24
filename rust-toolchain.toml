@@ -1,2 +1,6 @@
 [toolchain]
-channel = "stable"
+# Pinned: the dev image (docker/dev.Dockerfile) installs exactly this, and CI
+# runs inside that image. Bump here, and the image is rebuilt once.
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+targets = ["thumbv8m.main-none-eabihf"]
