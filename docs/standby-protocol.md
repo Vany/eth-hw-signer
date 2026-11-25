@@ -54,12 +54,12 @@ An earlier draft also passed a signed watermark export from the old holder to th
 ## 5. What it assumes
 
 - Each voter votes once per term. The arbiter is the one voter that is not a locked device.
-- **A slashable pair needs the arbiter compromised together with one host, or together with a cut link between the sites.** A compromised host alone or a compromised arbiter alone is not enough. The model reproduces this limit on purpose (scenario 09: compromised arbiter plus a cut link between the sites, both hosts honest → pairs on 30 of 30 seeds).
+- **A slashable pair needs the arbiter compromised together with one host, or together with a cut link between the sites.** A compromised host alone or a compromised arbiter alone is not enough, outside board replacement (§6, open). The model reproduces this limit on purpose (scenario 09: compromised arbiter plus a cut link between the sites, both hosts honest → pairs on 30 of 30 seeds).
 - An arbiter restored from an old backup could forget a vote it already gave. Fix: a restarted arbiter does not vote in the current term or the next one (scenario 14: 0 pairs).
 
 ## 6. Open finding: replacing a board
 
-**Replacing a device, as currently specified, is not safe against one compromised host at that site.** The new device has no clock and an empty vote record, and every input it gets about "now" comes from its own host. The model finds pairs on 30 of 30 seeds (scenario 19d). A candidate fix: the new device cold-starts from trusted time sources that its host cannot forge, instead of from host inputs. In the model it gives 0 pairs with a host that lies about time and replays old statements. The design decision is still open, and the specification has not changed yet.
+**Replacing a device, as currently specified, is not safe against one compromised host at that site.** The new device has no clock and an empty vote record, and every input it gets about "now" comes from its own host. The model finds pairs on 30 of 30 seeds (scenario 19d). A candidate fix: every voter votes only for the current or next term, judged by trusted time sources its host cannot forge; a new device cold-starts from those sources instead of host inputs. In the model, trusted time without this vote horizon still gives pairs (votes collected in advance by the replaced device); with it, 0 pairs, including with a host that lies about time and replays old statements. Each vote is signed with, and names, the voting device's own identity key, and a replaced device's key is retired, so the old board can't vote on behalf of its successor. The design decision is still open, and the specification has not changed yet.
 
 ## 7. Results (run of 2026-11-25)
 
