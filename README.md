@@ -31,7 +31,7 @@ Validator clients need no changes: to them this is just a remote signer. The hos
 
 | | |
 |---|---|
-| 🔒 **The key stays in the board** | A key is imported once. The board seals it under a key born inside the chip and returns only ciphertext. There is no export command. At runtime the key sits in RAM, encrypted, and is decrypted only for one signature. Power off or lose the host, and the key is gone from the board. |
+| 🔒 **The key stays in the board** | A key is imported by a command signed with the admin key. The board seals it under a key born inside the chip and returns only ciphertext. There is no export command. The board loads only keys on its own list; an erased key leaves the list, so its old ciphertext no longer loads. At runtime the key sits in RAM, encrypted, and is decrypted only for one signature. Power off or lose the host, and the key is gone from the board. |
 | 🧮 **The board computes what it signs** | It parses the request and derives the signing root itself, from the fork schedule it stores. It never signs a bare hash from the host. |
 | 🛡️ **Slashing protection lives in the board** | The watermark is in the board's flash, only moves forward, and is written before a signature is released. The host's usual EIP-3076 database stays as a second, independent check. |
 | ⛔ **Dangerous messages are refused** | Only validator duties are signed. Exits, deposits and withdrawal-credential changes are always refused. Loading or erasing keys and changing the fee recipient need a command signed by an admin key kept off the server, after a delay the board enforces. |
@@ -90,7 +90,7 @@ A Discovery kit costs about $90. At ~100 validators per board that is under $1 o
 - Firmware proof of concept: BLS signing in an emulator, matching our signing core and an independent reference (signing path only).
 - Software model of the two-site scheme: two simulated boards, the arbiter, real BLS signatures, an independent slashing checker.
 
-**Simulation results so far.** Across 26 failure and attack scenarios (site loss, split brain, power loss, compromised hosts and arbiter, chaos runs), the model produced no slashable pair where none should exist. It also found a gap we had missed: an arbiter restored from an old backup can forget a vote it already gave. The fix, that a restarted arbiter does not vote in the current or the next term, is in the model and passes. Mutation testing showed which guards the scenarios really exercise, and the tests are being tightened accordingly.
+**Simulation results so far.** Across 26 kinds of failure and attack (186 scenario variants, 30 seeds each: site loss, split brain, power loss, compromised hosts and arbiter, chaos runs), the model produced no slashable pair where none should exist. It also found a gap we had missed: an arbiter restored from an old backup can forget a vote it already gave. The fix, that a restarted arbiter does not vote in the current or the next term, is in the model and passes. Mutation testing showed which guards the scenarios really exercise, and the tests are being tightened accordingly.
 
 **Not done yet**
 - [ ] Signing benchmark on the STM32U585, with a sizing table
