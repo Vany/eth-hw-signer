@@ -1,5 +1,5 @@
 //! `signer-core`: the signing logic shared by the remote-signing router and
-//! the hardware wallet firmware (no_std + alloc, no OS, no RNG).
+//! the signing board firmware (STM32U5) (no_std + alloc, no OS, no RNG).
 //!
 //! Modules:
 //! - [`ssz`]: minimal SSZ merkleization ([`HashTreeRoot`](ssz::HashTreeRoot)).

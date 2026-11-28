@@ -1,4 +1,4 @@
-//! Stub device client for hardware-wallet emulators (Trezor / Speculos).
+//! Stub device client for a board emulator. Not implemented.
 //!
 //! TODO(step 3): speak the actual transport to the emulators. Until then
 //! every operation fails with a [`DeviceError::Transport`] error.
@@ -53,7 +53,7 @@ mod tests {
 
     #[tokio::test]
     async fn returns_transport_error() {
-        let dev = EmulatorDevice::new("trezor-emu-1");
+        let dev = EmulatorDevice::new("board-emu-1");
         let err = dev.public_keys().await.unwrap_err();
         assert!(matches!(err, DeviceError::Transport(_)));
     }

@@ -186,7 +186,7 @@ fn mock_listing(names: Vec<String>, secret: String) -> Mock {
 /// `must` (the record's GET, or the LIST) for this load, and the load's
 /// thread captured a non-empty log. (A load that never reached the mock,
 /// for a dead server thread or an accept error, or whose log went to
-/// another thread, would otherwise pass every no-echo check.) GLM1 G3:
+/// another thread, would otherwise pass every no-echo check.) Review finding:
 /// and every request carried the token, so the token check of the log
 /// (d1's, at TRACE, which includes ureq's DEBUG) is about a token that
 /// was sent.

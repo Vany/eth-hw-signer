@@ -13,9 +13,8 @@
 //! modular reduction `OS2IP(OKM) mod r` is implemented locally with
 //! 256-bit shift-subtract division.
 //!
-//! The division is not constant-time. Its inputs are HKDF outputs derived
-//! from the seed, not the seed itself; on a hardware wallet the derivation
-//! routines run inside the secure context anyway.
+//! Not constant-time. Runs only at key derivation, never per signature.
+//! Must be made constant-time before firmware use.
 
 use alloc::vec::Vec;
 use core::fmt;

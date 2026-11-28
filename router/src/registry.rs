@@ -16,9 +16,9 @@ use crate::state::{AppState, DeviceId};
 /// Which device backend to instantiate for the ids in the key map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DeviceBackend {
-    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC) — default for M0.
+    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC); logs a warning at startup.
     Mock,
-    /// Trezor/Speculos emulators — not implemented yet (step 3).
+    /// A board emulator — not implemented yet.
     Emulator,
     /// Real BLS with keys decrypted from EIP-2335 keystores into process
     /// memory. INSECURE — testnets only (see `soft_backend`).
@@ -30,7 +30,7 @@ pub enum DeviceBackend {
 /// The file must be a flat map of public key → device id, e.g.
 ///
 /// ```toml
-/// "0x<48-byte pubkey as 0x-hex>" = "trezor-1"
+/// "0x<48-byte pubkey as 0x-hex>" = "board-1"
 /// ```
 ///
 /// or the same shape as JSON. The format is picked from the file extension

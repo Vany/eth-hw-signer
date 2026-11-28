@@ -11,8 +11,9 @@ use crate::registry::DeviceBackend;
 #[command(
     name = "signer-router",
     version,
-    about = "Web3Signer-compatible remote signer backed by hardware wallets",
-    args_conflicts_with_subcommands = true
+    about = "Web3Signer-compatible remote signer host service for STM32U5 signing boards (backends: mock, soft, emulator stub)",
+    args_conflicts_with_subcommands = true,
+    subcommand_negates_reqs = true
 )]
 pub struct Cli {
     /// Without a subcommand the router serves the signing API.
@@ -29,9 +30,11 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub key_map: Option<PathBuf>,
 
-    /// Which device backend serves the ids in the key map.
-    #[arg(long, value_enum, default_value_t = DeviceBackend::Mock)]
-    pub device_backend: DeviceBackend,
+    /// Which device backend serves the ids in the key map. Required when
+    /// serving (not for subcommands), so that nobody runs the mock (fake
+    /// signatures) without asking for it.
+    #[arg(long, value_enum, required = true)]
+    pub device_backend: Option<DeviceBackend>,
 
     /// `soft` backend: where the EIP-2335 keystores come from.
     #[arg(long, value_enum, default_value_t = KeySourceKind::File)]

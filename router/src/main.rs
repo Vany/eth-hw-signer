@@ -46,7 +46,16 @@ async fn main() -> ExitCode {
         };
     }
 
-    let state = match build_state(&cli) {
+    let Some(backend) = cli.device_backend else {
+        eprintln!("error: --device-backend is required");
+        return ExitCode::FAILURE;
+    };
+
+    if backend == DeviceBackend::Mock {
+        tracing::warn!("backend=mock: signatures are FAKE");
+    }
+
+    let state = match build_state(&cli, backend) {
         Ok(state) => state,
         Err(err) => {
             eprintln!("error: {err}");
@@ -58,7 +67,7 @@ async fn main() -> ExitCode {
         listen = %cli.listen,
         keys = state.public_keys().len(),
         devices = state.device_count(),
-        backend = ?cli.device_backend,
+        backend = ?backend,
         "signer-router listening"
     );
 
@@ -77,8 +86,8 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn build_state(cli: &Cli) -> Result<AppState, String> {
-    if cli.device_backend == DeviceBackend::Soft {
+fn build_state(cli: &Cli, backend: DeviceBackend) -> Result<AppState, String> {
+    if backend == DeviceBackend::Soft {
         eprintln!("{}", soft_backend::BANNER);
         tracing::warn!("INSECURE SOFTWARE KEYS – TESTNET ONLY (--device-backend soft)");
         if cli.key_map.is_some() {
@@ -152,7 +161,7 @@ fn build_state(cli: &Cli) -> Result<AppState, String> {
         );
     }
     match &cli.key_map {
-        Some(path) => load_state(path, cli.device_backend),
+        Some(path) => load_state(path, backend),
         None => Ok(AppState::new(BTreeMap::new(), HashMap::new())),
     }
 }
