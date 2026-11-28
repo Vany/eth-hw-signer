@@ -49,7 +49,7 @@ If a board fails, the key moves to a replacement only in a way that cannot creat
 | Situation | What happens |
 |---|---|
 | Board alive and in hand | It stops, writes one atomic retirement record with all its watermarks, and the replacement starts from exactly those watermarks |
-| Board dead and in hand | Identified by seal and serial number, the chip destroyed in front of two people; the replacement starts from conservative "blind" floors signed M-of-N, above anything the old board could have signed |
+| Board dead and in hand | **By default, exit.** A path where the replacement starts from conservative "blind" floors signed M-of-N, above anything the old board could have signed, is specified, but it stays off until the hardware tests of board identification and the tamper sensor pass |
 | **Board stolen, missing, or in doubt** | **Exit.** The key is never loaded anywhere again; a new validator gets a new key |
 
 A board down means missed duties, not slashing.
@@ -65,17 +65,17 @@ Two guards keep this from turning into a slashing:
 
 We checked this in a software model: **no slashable pair in any of 720 exit runs**. Each guard alone is enough; disabling both does produce slashable pairs, and the checker catches them, so the result is not an artifact of a blind test.
 
-**Can the thief open the chip in time?** Our position: even if the chip is opened, opening it is slow, and the operator exits first. Concretely, the attack must not finish before
+**A stolen running board.** The key lives in the board only while an authenticated, encrypted session ping from the host in its rack keeps arriving within a tight latency bound. If a ping is missed, fails verification or arrives late, the board wipes the key, whether or not it still has power. So taking the board out of the rack, breaking the USB session or rebooting it leaves an empty board, and the key server gives the ciphertext again only to a current holder that is not on hold. Hold is the first thing the operator, or the rack's tamper sensor, sets. A relay that stretches the session to another place has to meet the same latency bound end to end; the bound is fixed by the hardware tests.
 
-> *t*<sub>detect</sub> + exit queue + 256 epochs (~27 h, from exit to withdrawable)
+**An attack in place.** What remains is an attack on the board in the rack, while it signs. The STM32U585 is a general-purpose microcontroller with TrustZone, not a secure element, so we don't claim the chip can't be opened. Our position: even if someone opens it, it is slow, and the operator exits in time. The condition is
 
-With today's exit queue (~30 h) and detection within an hour, that is about **2.4 days**. What we rely on:
+> time to extract the key > detection + exit queue + 256 epochs (~27 h, from `exit_epoch` to `withdrawable_epoch`)
 
-- **A reset kills the key.** The best-studied attacks on STM32 (voltage glitching to bypass read-out protection) need a reset or reboot. A reset wipes RAM, and the key server re-issues the ciphertext only to a board that is not on hold. Putting a stolen board on hold is the first step of the theft response.
-- **Detection is fast.** A locked rack with a tamper sensor and an alarm when any board is unplugged is a requirement, not advice. A thief can relay a running board's USB elsewhere, so the sensor, not the host, is what notices.
-- **What stays open:** a prepared attacker with a side-channel probe on a running, signing board. The firmware design calls for constant-time code and a rate limit on signatures, but this is the attack we can rule out least, and we don't claim more.
+because a validator can be slashed until its withdrawable epoch. With today's exit queue (~30 h) and detection within an hour, that is about **2.4 days**. At the worst exit queue so far (~46.6 days, September 2025) it is about 48 days; then the margin rests on the site, not the chip: we watch the queue, and above a set length we tighten physical protection so that detection takes minutes. A thief gains nothing either way: rewards and withdrawals don't go to them, so a slashing would be damage, not theft.
 
-**When the exit queue is long** (its yearly peak was weeks, not hours), the margin rests on physical security: we watch the queue and, above a set length, tighten guarding at the sites so that detection takes minutes. A thief gains nothing from a slashing; the loss is a penalty and lost duties for one validator.
+Until withdrawable, a stolen board signs only what its own watermarks allow, and no other signer of that key exists, so there is nothing to pair its signatures with. We count the exit as done only when a watcher sees the withdrawable epoch pass on chain.
+
+**Still open, and stated as such:** rollback of a board's flash by someone with physical access is closed only by a hardware monotonic counter, which we still have to test; until then any physical access counts as doubt, which means exit. None of this runs on hardware yet: the key wipe on a broken session and the stolen-board case are acceptance tests for the first hardware milestone. The full answer to the review question that led here is in the [Lido forum thread](https://research.lido.fi/t/12227/7).
 
 ## Hardware
 
@@ -147,7 +147,7 @@ Development lands on `main` without per-commit review; `main` must pass the chec
 
 ## Limits
 
-- The boundary is a general-purpose security microcontroller, not a certified secure element running our code. It stops a remote attacker on the host. Against a lab with hands on a running board it buys time, not certainty: see [Theft](#theft-exit-and-why-it-is-safe). Racks must be locked and alarmed. There is no remote attestation.
+- The boundary is a general-purpose security microcontroller, not a certified secure element running our code. It stops a remote attacker on the host. A board taken out of its rack is empty; against a lab working on a board in place it buys time, not certainty: see [Theft](#theft-exit-and-why-it-is-safe). Racks must be locked and alarmed. There is no remote attestation.
 - Locking a board cannot be undone.
 - If the same key also runs in some other signer, this system cannot know.
 - One key, one board: a board failure means missed duties until the replacement is up.
