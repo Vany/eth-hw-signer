@@ -82,8 +82,8 @@ macro_rules! or_skip {
 }
 
 const POLICY: &str = r#"
-path "signer-hoodi/data/validators/stand/*" { capabilities = ["create", "read", "update"] }
-path "signer-hoodi/metadata/validators/stand/*" { capabilities = ["list"] }
+path "eth-hw-signer/data/validators/main/*" { capabilities = ["create", "read", "update"] }
+path "eth-hw-signer/metadata/validators/main/*" { capabilities = ["list"] }
 "#;
 
 const NO_VAULT: &str = "vault_real: no vault binary (set VAULT_BIN or put vault on PATH)";
@@ -258,7 +258,7 @@ impl DevVault {
     fn provision(&self) -> String {
         let (s, b) = self.call(
             "POST",
-            "/v1/sys/mounts/signer-hoodi",
+            "/v1/sys/mounts/eth-hw-signer",
             Some(json!({ "type": "kv", "options": { "version": "2" } })),
         );
         assert!(s == 204 || s == 200, "{s} {b}");
@@ -281,7 +281,7 @@ impl DevVault {
     fn client(&self, token: &str, prefix: &str, with_ca: bool) -> VaultClient {
         VaultClient::new(VaultConfig {
             addr: self.addr.clone(),
-            mount: "signer-hoodi".into(),
+            mount: "eth-hw-signer".into(),
             path_prefix: prefix.into(),
             device_id: DEVICE.into(),
             auth: VaultAuth::Token(Zeroizing::new(token.to_string())),
@@ -317,7 +317,7 @@ fn pk() -> PublicKey {
 async fn real_vault_end_to_end() {
     let v = or_skip!(DevVault::start());
     let token = v.provision();
-    let c = v.client(&token, "validators/stand", true);
+    let c = v.client(&token, "validators/main", true);
 
     // Empty prefix: refuse to start.
     let (pw, db) = v.files();
@@ -334,7 +334,7 @@ async fn real_vault_end_to_end() {
     assert!(err.contains("no keys under"), "{err}");
 
     // vault-put: create, then an idempotent re-put, then no overwrite.
-    let c = v.client(&token, "validators/stand", true);
+    let c = v.client(&token, "validators/main", true);
     assert_eq!(
         c.put_keystore(&pk(), KEYSTORE).unwrap(),
         PutOutcome::Created
@@ -349,7 +349,7 @@ async fn real_vault_end_to_end() {
     // B1 layout: /v1/<mount>/data/<prefix>/<pubkey>/<device-id>, field value.
     assert_eq!(
         c.key_path(&pk()),
-        format!("/v1/signer-hoodi/data/validators/stand/{PUBKEY}/{DEVICE}")
+        format!("/v1/eth-hw-signer/data/validators/main/{PUBKEY}/{DEVICE}")
     );
     let (s, b) = v.call("GET", &c.key_path(&pk()), None);
     assert_eq!(s, 200);
@@ -390,12 +390,12 @@ async fn real_vault_policy_and_fail_closed() {
 
     // TLS: without the CA the self-signed certificate is rejected.
     let err = v
-        .client(&token, "validators/stand", false)
+        .client(&token, "validators/main", false)
         .list_pubkeys()
         .unwrap_err();
     assert!(err.to_string().contains("failed"), "{err}");
 
-    // The policy confines the token to validators/stand.
+    // The policy confines the token to validators/main.
     let other = v.client(&token, "validators/other", true);
     let err = other.list_pubkeys().unwrap_err();
     assert!(err.to_string().contains("HTTP 403"), "{err}");
@@ -403,11 +403,11 @@ async fn real_vault_policy_and_fail_closed() {
     assert!(err.to_string().contains("HTTP 403"), "{err}");
 
     // Anything else under the prefix (written by root here) refuses the load.
-    let c = v.client(&token, "validators/stand", true);
+    let c = v.client(&token, "validators/main", true);
     c.put_keystore(&pk(), KEYSTORE).unwrap();
     let (s, b) = v.call(
         "POST",
-        "/v1/signer-hoodi/data/validators/stand/notes",
+        "/v1/eth-hw-signer/data/validators/main/notes",
         Some(json!({ "data": { "value": "hello" } })),
     );
     assert_eq!(s, 200, "{b}");
@@ -425,15 +425,15 @@ async fn real_vault_policy_and_fail_closed() {
     assert!(err.contains("refusing unexpected content"), "{err}");
 }
 
-// ---- B4: cert auth (V-57 D7) ----
+// ---- B4: cert auth ----
 
 /// Split policies (B3) for the test device ([`DEVICE`]): the router's
 /// read policy.
 fn read_policy() -> String {
     format!(
         r#"
-path "signer-hoodi/data/validators/+/+/{DEVICE}" {{ capabilities = ["read"] }}
-path "signer-hoodi/metadata/validators/+/" {{ capabilities = ["list"] }}
+path "eth-hw-signer/data/validators/+/+/{DEVICE}" {{ capabilities = ["read"] }}
+path "eth-hw-signer/metadata/validators/+/" {{ capabilities = ["list"] }}
 path "auth/token/revoke-self" {{ capabilities = ["update"] }}
 "#
     )
@@ -444,7 +444,7 @@ path "auth/token/revoke-self" {{ capabilities = ["update"] }}
 fn import_policy() -> String {
     format!(
         r#"
-path "signer-hoodi/data/validators/import/+/{DEVICE}" {{ capabilities = ["create"] }}
+path "eth-hw-signer/data/validators/import/+/{DEVICE}" {{ capabilities = ["create"] }}
 path "auth/token/revoke-self" {{ capabilities = ["update"] }}
 "#
     )
@@ -580,7 +580,7 @@ async fn b4_real_vault_cert_auth() {
     let (_, other_leaf, other_key) = or_skip!(make_client_cert(&other, "signer-router-test"));
 
     // The record, written with the provisioning token.
-    v.client(&token, "validators/stand", true)
+    v.client(&token, "validators/main", true)
         .put_keystore(&pk(), KEYSTORE)
         .unwrap();
 
@@ -599,8 +599,8 @@ async fn b4_real_vault_cert_auth() {
         VaultClient::new(
             VaultConfig::from_files(
                 &v.addr,
-                "signer-hoodi",
-                "validators/stand",
+                "eth-hw-signer",
+                "validators/main",
                 DEVICE,
                 AuthFiles::Cert {
                     mount: "cert",
@@ -786,7 +786,7 @@ fn vault_ca_path(v: &DevVault) -> PathBuf {
 async fn c3_login_token_released_on_failure() {
     let v = or_skip!(DevVault::start());
     let token = v.provision();
-    v.client(&token, "validators/stand", true)
+    v.client(&token, "validators/main", true)
         .put_keystore(&pk(), KEYSTORE)
         .unwrap();
     let (_, leaf, key) = or_skip!(setup_cert_auth(&v));
@@ -794,8 +794,8 @@ async fn c3_login_token_released_on_failure() {
         VaultClient::new(
             VaultConfig::from_files(
                 &v.addr,
-                "signer-hoodi",
-                "validators/stand",
+                "eth-hw-signer",
+                "validators/main",
                 DEVICE,
                 AuthFiles::Cert {
                     mount: "cert",
@@ -845,7 +845,7 @@ async fn c3_login_token_released_on_failure() {
     assert_eq!(cert_token_count(&v), 0, "token left after a failed load");
 
     // vault-put whose write is denied (the role may only read).
-    let (ok, _, stderr) = vault_put_as(&v, (&leaf, &key), "signer-router", "validators/stand");
+    let (ok, _, stderr) = vault_put_as(&v, (&leaf, &key), "signer-router", "validators/main");
     assert!(!ok, "{stderr}");
     assert!(stderr.contains("HTTP 403"), "{stderr}");
     assert_eq!(
@@ -916,7 +916,7 @@ async fn e4_successful_cert_auth_put_leaves_no_token() {
     assert!(stdout.contains("[created]"), "{stdout}");
     let (s, b) = v.call(
         "GET",
-        &format!("/v1/signer-hoodi/data/validators/import/{PUBKEY}/{DEVICE}"),
+        &format!("/v1/eth-hw-signer/data/validators/import/{PUBKEY}/{DEVICE}"),
         None,
     );
     assert_eq!(s, 200, "{b}");
@@ -948,8 +948,8 @@ async fn c6_rogue_ca_is_refused() {
     let with_ca = |ca: &Path| {
         VaultConfig::from_files(
             &v.addr,
-            "signer-hoodi",
-            "validators/stand",
+            "eth-hw-signer",
+            "validators/main",
             DEVICE,
             AuthFiles::TokenFile(&tok),
             None,
@@ -995,7 +995,7 @@ impl Drop for Router {
 async fn c6_router_binary_serves_with_cert_auth() {
     let v = or_skip!(DevVault::start());
     let token = v.provision();
-    v.client(&token, "validators/stand", true)
+    v.client(&token, "validators/main", true)
         .put_keystore(&pk(), KEYSTORE)
         .unwrap();
     let (_, leaf, key) = or_skip!(setup_cert_auth(&v));

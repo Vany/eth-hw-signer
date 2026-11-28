@@ -27,7 +27,7 @@ const HOODI: [u8; 32] = [
     0x66, 0xdc, 0xec, 0xf9, 0x00, 0x86, 0x74, 0x01, 0xa9, 0x20, 0x23, 0xd7, 0xba, 0x99, 0xcb, 0x5f,
 ];
 const TOKEN: &str = "hvs.test-token-not-a-secret";
-const LIST: &str = "/v1/signer-hoodi/metadata/validators/stand/?list=true";
+const LIST: &str = "/v1/eth-hw-signer/metadata/validators/main/?list=true";
 
 const DEVICE: &str = "stand-soft-1";
 
@@ -37,7 +37,7 @@ fn data_path(pk: &str) -> String {
 }
 
 fn data_path_for(pk: &str, device: &str) -> String {
-    format!("/v1/signer-hoodi/data/validators/stand/{pk}/{device}")
+    format!("/v1/eth-hw-signer/data/validators/main/{pk}/{device}")
 }
 
 /// The listing entry of a pubkey folder.
@@ -52,8 +52,8 @@ fn client(addr: &str) -> VaultClient {
 fn client_for(addr: &str, device: &str) -> VaultClient {
     VaultClient::new(VaultConfig {
         addr: addr.to_string(),
-        mount: "signer-hoodi".into(),
-        path_prefix: "validators/stand".into(),
+        mount: "eth-hw-signer".into(),
+        path_prefix: "validators/main".into(),
         device_id: device.into(),
         auth: VaultAuth::Token(Zeroizing::new(TOKEN.to_string())),
         client_cert: None,
@@ -239,8 +239,8 @@ fn router_binary_refuses_vault_without_expected_pubkeys() {
 fn cert_cfg(addr: &str, client_cert: bool) -> VaultConfig {
     VaultConfig {
         addr: addr.to_string(),
-        mount: "signer-hoodi".into(),
-        path_prefix: "validators/stand".into(),
+        mount: "eth-hw-signer".into(),
+        path_prefix: "validators/main".into(),
         device_id: DEVICE.into(),
         auth: VaultAuth::Cert {
             mount: "cert".into(),
@@ -759,8 +759,8 @@ fn e6_vault_put_with_a_token_file_never_revokes_it() {
 fn plain_http_only_to_loopback() {
     let cfg = |addr: &str| VaultConfig {
         addr: addr.to_string(),
-        mount: "signer-hoodi".into(),
-        path_prefix: "validators/stand".into(),
+        mount: "eth-hw-signer".into(),
+        path_prefix: "validators/main".into(),
         device_id: DEVICE.into(),
         auth: VaultAuth::Token(Zeroizing::new(TOKEN.to_string())),
         client_cert: None,

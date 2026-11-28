@@ -95,9 +95,9 @@ pub enum KeySourceKind {
 }
 
 /// Default of `--vault-mount`.
-pub const DEFAULT_VAULT_MOUNT: &str = "signer-hoodi";
+pub const DEFAULT_VAULT_MOUNT: &str = "eth-hw-signer";
 /// Default of `--vault-path-prefix`.
-pub const DEFAULT_VAULT_PATH_PREFIX: &str = "validators/stand";
+pub const DEFAULT_VAULT_PATH_PREFIX: &str = "validators/main";
 /// Default of `--vault-cert-auth-mount`.
 pub const DEFAULT_VAULT_CERT_AUTH_MOUNT: &str = "cert";
 
@@ -140,12 +140,12 @@ pub struct VaultArgs {
     #[arg(long, value_name = "FILE")]
     pub vault_client_key: Option<PathBuf>,
 
-    /// KV v2 mount [default: signer-hoodi].
+    /// KV v2 mount [default: eth-hw-signer].
     #[arg(long, value_name = "MOUNT")]
     pub vault_mount: Option<String>,
 
     /// Folder under the mount holding one folder per pubkey [default:
-    /// validators/stand].
+    /// validators/main].
     #[arg(long, value_name = "PATH")]
     pub vault_path_prefix: Option<String>,
 

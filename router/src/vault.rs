@@ -1,5 +1,5 @@
-//! HashiCorp Vault KV v2 as a key source for the `soft` backend. Layout
-//! (V-57 D3b): one record per (validator, device) at
+//! HashiCorp Vault KV v2 as a key source for the `soft` backend. Layout:
+//! one record per (validator, device) at
 //! `/v1/<mount>/data/<prefix>/<pubkey>/<device-id>`, where `<pubkey>` is
 //! the `0x`-prefixed lowercase pubkey and the record's `value` field is the
 //! EIP-2335 keystore JSON. The keystore password stays a local file; Vault
@@ -20,7 +20,7 @@
 //! filed under; an expected pubkey with no record for this device and an
 //! empty prefix are errors.
 //!
-//! Authentication (V-57 D7): the router logs in with Vault's TLS cert auth
+//! Authentication: the router logs in with Vault's TLS cert auth
 //! (`/v1/auth/<mount>/login`) using its TLS client certificate, the same
 //! one the listener's mTLS checks; the token it gets lives only in memory
 //! and is revoked once the keys are loaded. A static token file
@@ -128,7 +128,7 @@ pub enum VaultError {
     #[error("vault: responses of one load exceed {limit} bytes in total; refused")]
     TotalTooLarge { limit: u64 },
     /// A record that holds (or claims to hold) a raw secret key: refused
-    /// always, whatever else it says (V-57 D6: plaintext never leaves).
+    /// always, whatever else it says (plaintext never leaves the board).
     /// The message never contains the value, and names the field only if
     /// it is `format` or `value`: any other field is "an extra field"
     /// (its name is record text too, written by the importer: E1).
@@ -182,9 +182,9 @@ pub enum AuthFiles<'a> {
 pub struct VaultConfig {
     /// `https://host:port` (or `http://` to `127.0.0.1` / `[::1]` only), no path.
     pub addr: String,
-    /// KV v2 mount, e.g. `signer-hoodi`.
+    /// KV v2 mount, e.g. `eth-hw-signer`.
     pub mount: String,
-    /// Folder under the mount, e.g. `validators/stand`.
+    /// Folder under the mount, e.g. `validators/main`.
     pub path_prefix: String,
     /// This router's / importer's device id (`[a-z0-9-]`, 1..=64): the
     /// last path segment of every record it reads or writes.
@@ -843,7 +843,7 @@ fn cas_mismatch(body: &Value) -> bool {
 /// JSON>" }`. Before anything else, any field that looks like a raw secret
 /// key (a bare 32-byte hex string, with or without `0x`) or a `format`
 /// that names raw/hex/plain key material refuses the record with
-/// [`VaultError::RawKey`]: a raw key is refused always (V-57 D6).
+/// [`VaultError::RawKey`]: a raw key is refused always.
 ///
 /// "A raw key is refused always" holds by the closed allow-rule, not by
 /// the heuristic: a record is accepted only if it has exactly the fields
@@ -1105,8 +1105,8 @@ mod tests {
     #[test]
     fn path_rules() {
         assert_eq!(
-            validate_path("/validators/stand/", "x").unwrap(),
-            "validators/stand"
+            validate_path("/validators/main/", "x").unwrap(),
+            "validators/main"
         );
         assert!(validate_path("validators/../x", "x").is_err());
         assert!(validate_path("a//b", "x").is_err());
@@ -1247,7 +1247,7 @@ mod tests {
 
     const LOGIN: &str = "/v1/auth/cert/login";
     const REVOKE: &str = "/v1/auth/token/revoke-self";
-    const LIST: &str = "/v1/signer-hoodi/metadata/validators/stand/?list=true";
+    const LIST: &str = "/v1/eth-hw-signer/metadata/validators/main/?list=true";
 
     /// A client that logs in with cert auth on first use. `new` refuses
     /// cert auth without https and a client certificate, and the mock is
@@ -1256,8 +1256,8 @@ mod tests {
     fn login_client(addr: &str) -> VaultClient {
         let mut c = VaultClient::new(VaultConfig {
             addr: addr.to_string(),
-            mount: "signer-hoodi".into(),
-            path_prefix: "validators/stand".into(),
+            mount: "eth-hw-signer".into(),
+            path_prefix: "validators/main".into(),
             device_id: "stand-soft-1".into(),
             auth: VaultAuth::Token(Zeroizing::new("hvs.unused-test-token".into())),
             client_cert: None,
@@ -1417,8 +1417,8 @@ mod tests {
         // A token-auth client (nothing to revoke, ever) does not warn.
         let t = VaultClient::new(VaultConfig {
             addr: m.addr.clone(),
-            mount: "signer-hoodi".into(),
-            path_prefix: "validators/stand".into(),
+            mount: "eth-hw-signer".into(),
+            path_prefix: "validators/main".into(),
             device_id: "stand-soft-1".into(),
             auth: VaultAuth::Token(Zeroizing::new("hvs.unused-test-token".into())),
             client_cert: None,

@@ -54,7 +54,7 @@ const HOODI: [u8; 32] = [
 ];
 const TOKEN: &str = "hvs.test-token-not-a-secret";
 const DEVICE: &str = "stand-soft-1";
-const LIST: &str = "/v1/signer-hoodi/metadata/validators/stand/?list=true";
+const LIST: &str = "/v1/eth-hw-signer/metadata/validators/main/?list=true";
 
 /// Where a marker is planted: a field of the record, or a JSON pointer
 /// into the keystore inside `value`.
@@ -164,7 +164,7 @@ fn mock(secret: String) -> Mock {
 
 /// This device's record path for the test pubkey.
 fn data_path() -> String {
-    format!("/v1/signer-hoodi/data/validators/stand/0x{PUBKEY}/{DEVICE}")
+    format!("/v1/eth-hw-signer/data/validators/main/0x{PUBKEY}/{DEVICE}")
 }
 
 /// As [`mock`], with `names` as the listing.
@@ -209,8 +209,8 @@ fn reached(o: &Outcome, m: &Mock, must: &str) {
 fn client(addr: &str) -> VaultClient {
     VaultClient::new(VaultConfig {
         addr: addr.to_string(),
-        mount: "signer-hoodi".into(),
-        path_prefix: "validators/stand".into(),
+        mount: "eth-hw-signer".into(),
+        path_prefix: "validators/main".into(),
         device_id: DEVICE.into(),
         auth: VaultAuth::Token(Zeroizing::new(TOKEN.to_string())),
         client_cert: None,
@@ -464,7 +464,7 @@ fn e1_format_and_value_are_named() {
 /// test pubkey, the keystore's own fields).
 fn collides(planted: &str) -> bool {
     let fixed =
-        format!("{KEYSTORE}{LIST}/v1/signer-hoodi/data/validators/stand/0x{PUBKEY}/{DEVICE}")
+        format!("{KEYSTORE}{LIST}/v1/eth-hw-signer/data/validators/main/0x{PUBKEY}/{DEVICE}")
             .to_ascii_lowercase();
     let p = planted.to_ascii_lowercase();
     (0..=p.len() - 8).any(|i| fixed.contains(&p[i..i + 8]))
