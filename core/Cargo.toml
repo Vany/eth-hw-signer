@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "no_std core shared by the signer-router host service and the signing board firmware (STM32U5): SSZ signing roots, EIP-3076 slashing protection, EIP-2333/2334 key derivation, BLS12-381 signing"
+description = "no_std core shared by the signer-router and hardware wallet firmware: SSZ signing roots, EIP-3076 slashing protection, EIP-2333/2334 key derivation, BLS12-381 signing"
 
 [features]
 default = ["bls"]

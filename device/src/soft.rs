@@ -4,14 +4,23 @@
 //!
 //! # ⚠ TESTING / DEVELOPMENT ONLY — SOFTWARE KEYS
 //! The keys are derived in software (EIP-2333) from a seed supplied by the
-//! caller. There is no secure element, no user confirmation, no rate
-//! limiting. Never use this device outside tests, examples, and local
-//! development.
+//! caller, or decrypted from EIP-2335 keystores into process memory. There
+//! is no secure element, no user confirmation, no rate limiting. Never use
+//! this device outside tests, local development and testnets.
+//!
+//! Slashing protection is a [`SlashingProtection`]: volatile for the
+//! seed-derived test constructors, persisted as an EIP-3076 interchange
+//! file for [`SoftDevice::from_keys`] (see [`crate::slashing_store`]).
+//! Every request's `genesis_validators_root` must match the database's
+//! (pinned when a file is created or opened at startup, never by a request;
+//! the volatile test database pins on first use), and [`SoftDevice::deny_networks`] refuses chosen
+//! networks outright.
 //!
 //! Supported request types (others return `DeviceError::Invalid`):
 //! ATTESTATION, BLOCK_V2 (header-only form, BELLATRIX+), AGGREGATE_AND_PROOF,
 //! AGGREGATE_AND_PROOF_V2, VOLUNTARY_EXIT, RANDAO_REVEAL, AGGREGATION_SLOT,
-//! SYNC_COMMITTEE_MESSAGE, SYNC_COMMITTEE_SELECTION_PROOF.
+//! SYNC_COMMITTEE_MESSAGE, SYNC_COMMITTEE_SELECTION_PROOF,
+//! SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF.
 //!
 //! For the fork-varying containers (attestations inside aggregates, block
 //! headers) the SSZ shape is chosen by the fork active at the message's
@@ -26,7 +35,6 @@ use serde_json::{Map, Value};
 
 use signer_core::bls;
 use signer_core::domains::{compute_signing_root, domain_at_epoch, DomainType};
-use signer_core::slashing::{InMemorySlashingDb, SlashingDb as _, SlashingError};
 use signer_core::ssz::{merkleize, Bitlist, Bitvector, HashTreeRoot as _};
 use signer_core::types::{
     AggregateAndProof as CoreAggregateAndProof, AggregateAndProofElectra,
@@ -39,6 +47,8 @@ use signer_core::types::{
 use crate::client::DeviceClient;
 use crate::error::DeviceError;
 use crate::fork::{ensure_version_agrees, fork_at_epoch, ForkName};
+use crate::keystore::DecryptedKey;
+use crate::slashing_store::SlashingProtection;
 use crate::types::{BeaconBlockV2, ForkInfo, PublicKey, Signature, SigningRequest};
 
 /// Slots per epoch used to derive the domain epoch from a slot (32 on
@@ -71,20 +81,27 @@ struct SigningTask {
 
 /// A software BLS signer for tests and development (see module docs).
 pub struct SoftDevice {
-    keys: BTreeMap<PublicKey, bls::SecretKey>,
+    /// Boxed so that map rebalancing and moves only ever move a pointer:
+    /// each secret lives at one heap address and is zeroized there on drop.
+    keys: BTreeMap<PublicKey, Box<bls::SecretKey>>,
     slots_per_epoch: u64,
-    slashing: Mutex<InMemorySlashingDb>,
+    slashing: Mutex<SlashingProtection>,
+    /// Genesis validators roots this device refuses to sign for.
+    denied_networks: Vec<[u8; 32]>,
 }
 
 impl SoftDevice {
     /// Derive `validator_count` signing keys (EIP-2334 `m/12381/3600/i/0/0`)
-    /// from `seed` (at least 32 bytes, e.g. a BIP-39 seed).
+    /// from `seed` (at least 32 bytes, e.g. a BIP-39 seed), with volatile
+    /// slashing protection. Tests only (`test-util` feature).
+    #[cfg(any(test, feature = "test-util"))]
     pub fn from_seed(seed: &[u8], validator_count: u32) -> Result<Self, String> {
         Self::from_seed_with_slots_per_epoch(seed, validator_count, DEFAULT_SLOTS_PER_EPOCH)
     }
 
     /// Like [`SoftDevice::from_seed`] with an explicit slots-per-epoch
-    /// (only for nonstandard chains).
+    /// (only for nonstandard chains). Tests only (`test-util` feature).
+    #[cfg(any(test, feature = "test-util"))]
     pub fn from_seed_with_slots_per_epoch(
         seed: &[u8],
         validator_count: u32,
@@ -92,9 +109,10 @@ impl SoftDevice {
     ) -> Result<Self, String> {
         let mut keys = BTreeMap::new();
         for account in 0..validator_count {
-            let secret = signer_core::eip2333::validator_signing_key(seed, account)
+            let mut derived = signer_core::eip2333::validator_signing_key(seed, account)
                 .map_err(|e| format!("seed derivation failed: {e}"))?;
-            let secret = bls::SecretKey::from_bytes(secret)
+            // Built in its box; `derived` is wiped on every exit.
+            let secret = bls::SecretKey::from_bytes_boxed(&mut derived)
                 .map_err(|e| format!("derived key invalid: {e}"))?;
             let public = bls::public_key(&secret);
             keys.insert(PublicKey::from_bytes(*public.as_bytes()), secret);
@@ -102,8 +120,36 @@ impl SoftDevice {
         Ok(Self {
             keys,
             slots_per_epoch,
-            slashing: Mutex::new(InMemorySlashingDb::default()),
+            slashing: Mutex::new(SlashingProtection::in_memory()),
+            denied_networks: Vec::new(),
         })
+    }
+
+    /// A device over decrypted keystore keys with the given slashing
+    /// protection (normally [`SlashingProtection::open`] on a file).
+    pub fn from_keys(
+        keys: Vec<DecryptedKey>,
+        slashing: SlashingProtection,
+    ) -> Result<Self, String> {
+        let mut map = BTreeMap::new();
+        for key in keys {
+            if map.insert(key.public_key, key.secret).is_some() {
+                return Err(format!("duplicate key {}", key.public_key.to_hex_string()));
+            }
+        }
+        Ok(Self {
+            keys: map,
+            slots_per_epoch: DEFAULT_SLOTS_PER_EPOCH,
+            slashing: Mutex::new(slashing),
+            denied_networks: Vec::new(),
+        })
+    }
+
+    /// Refuse every request whose `genesis_validators_root` is one of
+    /// `roots` (e.g. mainnet's, for software keys).
+    pub fn deny_networks(mut self, roots: &[[u8; 32]]) -> Self {
+        self.denied_networks.extend_from_slice(roots);
+        self
     }
 
     /// The public keys this device can sign with, sorted.
@@ -133,13 +179,32 @@ impl SoftDevice {
     ) -> Result<[u8; 32], DeviceError> {
         let (task, core_fork_info) = self.resolve_task(request)?;
         let signing_root = finish_root(&task, &core_fork_info, request)?;
+        let gvr = core_fork_info.genesis_validators_root;
+        if self.denied_networks.contains(&gvr) {
+            return Err(DeviceError::Invalid(format!(
+                "this device refuses to sign for genesis_validators_root 0x{}",
+                hex::encode(gvr)
+            )));
+        }
+        // One lock for the network pin, the check and the (persisted)
+        // record, so concurrent requests serialize on the database.
+        let mut slashing = self.lock_slashing()?;
+        slashing.check_network(gvr)?;
+        let key = core_pubkey(public_key);
         match task.slashing {
             SlashingCheck::None => {}
-            SlashingCheck::Block { slot } => self.record_block(public_key, slot, signing_root)?,
+            SlashingCheck::Block { slot } => {
+                slashing.check_and_record_block(&key, slot, signing_root)?
+            }
             SlashingCheck::Attestation {
                 source_epoch,
                 target_epoch,
-            } => self.record_attestation(public_key, source_epoch, target_epoch, signing_root)?,
+            } => slashing.check_and_record_attestation(
+                &key,
+                source_epoch,
+                target_epoch,
+                signing_root,
+            )?,
         }
         Ok(signing_root)
     }
@@ -170,35 +235,7 @@ impl SoftDevice {
         Ok((task, core_fork_info))
     }
 
-    fn record_block(
-        &self,
-        public_key: &PublicKey,
-        slot: u64,
-        signing_root: [u8; 32],
-    ) -> Result<(), DeviceError> {
-        let mut db = self.lock_slashing()?;
-        db.check_and_record_block(&core_pubkey(public_key), slot, signing_root)
-            .map_err(map_slashing)
-    }
-
-    fn record_attestation(
-        &self,
-        public_key: &PublicKey,
-        source_epoch: u64,
-        target_epoch: u64,
-        signing_root: [u8; 32],
-    ) -> Result<(), DeviceError> {
-        let mut db = self.lock_slashing()?;
-        db.check_and_record_attestation(
-            &core_pubkey(public_key),
-            source_epoch,
-            target_epoch,
-            signing_root,
-        )
-        .map_err(map_slashing)
-    }
-
-    fn lock_slashing(&self) -> Result<std::sync::MutexGuard<'_, InMemorySlashingDb>, DeviceError> {
+    fn lock_slashing(&self) -> Result<std::sync::MutexGuard<'_, SlashingProtection>, DeviceError> {
         self.slashing
             .lock()
             .map_err(|_| DeviceError::Transport("slashing protection mutex poisoned".into()))
@@ -333,6 +370,28 @@ impl SoftDevice {
                     slashing: SlashingCheck::None,
                 })
             }
+            SigningRequest::SyncCommitteeContributionAndProof { payload, .. } => {
+                let body = payload_object(payload, "contribution_and_proof")?;
+                let contribution = body
+                    .get("contribution")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| {
+                        invalid("contribution_and_proof is missing the `contribution` object")
+                    })?;
+                let slot = parse_uint(contribution, "slot")?;
+                let epoch = self.epoch_at_slot(slot);
+                if fork_at_epoch(&fork_info.fork, epoch)? == ForkName::Phase0 {
+                    return Err(invalid(
+                        "sync committee contributions do not exist before Altair",
+                    ));
+                }
+                Ok(SigningTask {
+                    object_root: contribution_and_proof_root(body, contribution, slot)?,
+                    domain_type: domains::DOMAIN_CONTRIBUTION_AND_PROOF,
+                    epoch,
+                    slashing: SlashingCheck::None,
+                })
+            }
             other => Err(DeviceError::Invalid(format!(
                 "request type {other:?} is not supported by SoftDevice"
             ))),
@@ -384,6 +443,51 @@ fn block_slot(beacon_block: &BeaconBlockV2) -> Result<u64, DeviceError> {
     }
 }
 
+/// `SyncCommitteeContribution` aggregation bits:
+/// `Bitvector[SYNC_COMMITTEE_SIZE // SYNC_COMMITTEE_SUBNET_COUNT]` = 512/4
+/// (presets/mainnet/altair.yaml, specs/altair/validator.md).
+const SYNC_SUBCOMMITTEE_SIZE: usize = 128;
+
+/// `hash_tree_root(ContributionAndProof)` (specs/altair/validator.md):
+/// `{aggregator_index: ValidatorIndex, contribution:
+/// SyncCommitteeContribution, selection_proof: BLSSignature}` with
+/// `SyncCommitteeContribution = {slot, beacon_block_root,
+/// subcommittee_index, aggregation_bits: Bitvector[128], signature}`.
+fn contribution_and_proof_root(
+    body: &Map<String, Value>,
+    contribution: &Map<String, Value>,
+    slot: u64,
+) -> Result<[u8; 32], DeviceError> {
+    let aggregator_index = parse_uint(body, "aggregator_index")?;
+    let selection_proof = parse_signature(body, "selection_proof")?;
+    let beacon_block_root = parse_root(contribution, "beacon_block_root")?;
+    let subcommittee_index = parse_uint(contribution, "subcommittee_index")?;
+    let bits_text = contribution
+        .get("aggregation_bits")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            invalid("contribution is missing `aggregation_bits` (Bitvector[128] hex)")
+        })?;
+    let bits = Bitvector::<{ SYNC_SUBCOMMITTEE_SIZE / 8 }>::from_ssz_bytes(
+        &decode_hex_quantity(bits_text, "aggregation_bits")?,
+        SYNC_SUBCOMMITTEE_SIZE,
+    )
+    .map_err(|e| invalid(format!("`aggregation_bits`: {e}")))?;
+    let signature = parse_signature(contribution, "signature")?;
+    let contribution_root = merkleize(&[
+        slot.hash_tree_root(),
+        beacon_block_root.hash_tree_root(),
+        subcommittee_index.hash_tree_root(),
+        bits.hash_tree_root(),
+        signature.hash_tree_root(),
+    ]);
+    Ok(merkleize(&[
+        aggregator_index.hash_tree_root(),
+        contribution_root,
+        selection_proof.hash_tree_root(),
+    ]))
+}
+
 /// A fork-selected aggregate container.
 enum ParsedAggregate {
     /// Phase0..Deneb: `Bitlist[2048]`, no committee bits.
@@ -428,10 +532,7 @@ fn aggregate_task(
         object_root,
         domain_type: signer_core::domains::DOMAIN_AGGREGATE_AND_PROOF,
         epoch: data.target.epoch,
-        slashing: SlashingCheck::Attestation {
-            source_epoch: data.source.epoch,
-            target_epoch: data.target.epoch,
-        },
+        slashing: SlashingCheck::None,
     })
 }
 
@@ -510,12 +611,6 @@ fn parse_aggregate_and_proof(
             }))
         }
     }
-}
-
-fn map_slashing(_detail: SlashingError) -> DeviceError {
-    // HTTP clients get the generic 412 body from the router; the detailed
-    // reason is not exposed.
-    DeviceError::SlashingRefused
 }
 
 fn core_pubkey(public_key: &PublicKey) -> PubKey {
@@ -649,6 +744,7 @@ mod tests {
     use crate::error::DeviceError;
     use crate::fork::{ForkName, MAINNET};
     use signer_core::domains::{compute_domain, fork_version_at_epoch};
+    use std::fs;
 
     // Seed from EIP-2333 test case 1 (see signer-core's eip2333 module).
     const SEED: &str = "0xc55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04";
@@ -658,11 +754,16 @@ mod tests {
         SoftDevice::from_seed(&hex::decode(seed).expect("valid hex seed"), 2).unwrap()
     }
 
-    /// Mainnet genesis validators root (verified against a live beacon
-    /// node's /eth/v1/beacon/genesis), used by every fixture below so the
-    /// domains — and therefore the pinned signing roots — are the real
-    /// mainnet values for these duties.
-    const MAINNET_GVR: &str = "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95";
+    /// Mainnet genesis validators root (the shared
+    /// [`crate::fork::MAINNET_GENESIS_VALIDATORS_ROOT`]), used by every
+    /// fixture below so the domains — and therefore the pinned signing
+    /// roots — are the real mainnet values for these duties.
+    fn mainnet_gvr_hex() -> String {
+        format!(
+            "0x{}",
+            hex::encode(crate::fork::MAINNET_GENESIS_VALIDATORS_ROOT)
+        )
+    }
 
     /// The mainnet fork_info of a state in `era`, built from the published
     /// schedule (see [`crate::fork`]): the state's Fork object carries the
@@ -685,8 +786,12 @@ mod tests {
                 "current_version": format!("0x{}", hex::encode(current)),
                 "epoch": epoch.to_string(),
             },
-            "genesis_validators_root": MAINNET_GVR,
+            "genesis_validators_root": mainnet_gvr_hex(),
         })
+    }
+
+    fn mainnet_gvr() -> [u8; 32] {
+        crate::fork::MAINNET_GENESIS_VALIDATORS_ROOT
     }
 
     fn fork_info() -> serde_json::Value {
@@ -701,6 +806,74 @@ mod tests {
             .find(|&&(_, fork, _)| fork == era)
             .expect("a scheduled mainnet fork");
         epoch * DEFAULT_SLOTS_PER_EPOCH
+    }
+
+    /// F2: a slashing-DB write that fails refuses the signature, through
+    /// the device's public `sign` (so "no signature released" is real), and
+    /// the refused duty can be retried once the store is writable again.
+    #[tokio::test]
+    async fn a_failed_slashing_db_write_refuses_the_signature() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("slashing.json");
+        let tmp = dir.path().join("slashing.json.tmp");
+        let keys = || {
+            let seed = hex::decode(SEED.strip_prefix("0x").unwrap()).unwrap();
+            (0..2)
+                .map(|i| {
+                    let sk = signer_core::eip2333::validator_signing_key(&seed, i).unwrap();
+                    let secret = Box::new(bls::SecretKey::from_bytes(sk).unwrap());
+                    DecryptedKey {
+                        public_key: PublicKey::from_bytes(*bls::public_key(&secret).as_bytes()),
+                        secret,
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let device = SoftDevice::from_keys(
+            keys(),
+            SlashingProtection::create(&path, mainnet_gvr()).unwrap(),
+        )
+        .unwrap();
+        let key = device.keys()[0];
+        device
+            .sign(&key, &attestation_body(10, 11, 1))
+            .await
+            .unwrap();
+        device
+            .sign(&key, &block_v2_body(slot_in(ForkName::Electra)))
+            .await
+            .unwrap();
+        let before = fs::read(&path).unwrap();
+
+        // Obstruct the next atomic write: `<db>.tmp` is a directory.
+        fs::create_dir(&tmp).unwrap();
+        let att = device.sign(&key, &attestation_body(11, 12, 1)).await;
+        assert!(matches!(att, Err(DeviceError::Transport(_))), "{att:?}");
+        let blk = device
+            .sign(&key, &block_v2_body(slot_in(ForkName::Electra) + 1))
+            .await;
+        assert!(matches!(blk, Err(DeviceError::Transport(_))), "{blk:?}");
+        assert_eq!(fs::read(&path).unwrap(), before, "file unchanged");
+
+        // Obstruction removed: the identical duty is allowed and persisted,
+        // a different root for the same target / slot is refused.
+        fs::remove_dir(&tmp).unwrap();
+        device
+            .sign(&key, &attestation_body(11, 12, 1))
+            .await
+            .unwrap();
+        assert_eq!(
+            device.sign(&key, &attestation_body(11, 12, 2)).await,
+            Err(DeviceError::SlashingRefused)
+        );
+        drop(device);
+        let device =
+            SoftDevice::from_keys(keys(), SlashingProtection::open(&path).unwrap()).unwrap();
+        assert_eq!(
+            device.sign(&key, &attestation_body(11, 12, 2)).await,
+            Err(DeviceError::SlashingRefused),
+            "the retried vote reached the file"
+        );
     }
 
     fn attestation_body(source: u64, target: u64, block_byte: u8) -> SigningRequest {
@@ -770,7 +943,7 @@ mod tests {
             current_version: [0x05, 0x00, 0x00, 0x00],
             epoch: 364_032,
         };
-        let gvr: [u8; 32] = hex::decode(&MAINNET_GVR[2..]).unwrap().try_into().unwrap();
+        let gvr: [u8; 32] = mainnet_gvr();
         let domain = compute_domain(
             signer_core::domains::DOMAIN_BEACON_ATTESTER,
             fork_version_at_epoch(&fork, data.target.epoch),
@@ -804,7 +977,7 @@ mod tests {
             current_version: [0x05, 0x00, 0x00, 0x00],
             epoch: 364_032,
         };
-        let gvr: [u8; 32] = hex::decode(&MAINNET_GVR[2..]).unwrap().try_into().unwrap();
+        let gvr: [u8; 32] = mainnet_gvr();
         let domain = compute_domain(
             signer_core::domains::DOMAIN_BEACON_PROPOSER,
             fork_version_at_epoch(&fork, slot / 32),
@@ -1039,10 +1212,7 @@ mod tests {
                     current_version: *parsed.fork.current_version.as_bytes(),
                     epoch: parsed.fork.epoch,
                 },
-                genesis_validators_root: hex::decode(&MAINNET_GVR[2..])
-                    .unwrap()
-                    .try_into()
-                    .unwrap(),
+                genesis_validators_root: mainnet_gvr(),
             }
         };
         let object_root = if electra_shape {
@@ -1107,7 +1277,7 @@ mod tests {
                 current_version: *parsed.fork.current_version.as_bytes(),
                 epoch: parsed.fork.epoch,
             },
-            genesis_validators_root: hex::decode(&MAINNET_GVR[2..]).unwrap().try_into().unwrap(),
+            genesis_validators_root: mainnet_gvr(),
         };
         compute_signing_root(
             data.hash_tree_root(),
@@ -1336,5 +1506,45 @@ mod tests {
             signature.as_bytes(),
             &expected_aggregate_signing_root(ForkName::Electra, true),
         ));
+    }
+
+    /// The routine duty flow: attest to a vote, then aggregate the same vote
+    /// as the selected aggregator. The aggregate's signing root differs from
+    /// the attestation's under the same (source, target); recording it as an
+    /// attestation would refuse it as a double vote (or, aggregate first,
+    /// refuse the attestation). Both must sign, in either order, and the
+    /// attestation rules must still bite afterwards.
+    #[tokio::test]
+    async fn aggregates_do_not_collide_with_the_attestation_of_the_same_vote() {
+        let era = ForkName::Electra;
+        let target = era_epoch(era);
+        let attestation = |block_byte: u8| -> SigningRequest {
+            let mut data = aggregate_data_json(target);
+            data["beacon_block_root"] = serde_json::json!(root_hex(block_byte));
+            serde_json::from_value(serde_json::json!({
+                "type": "ATTESTATION",
+                "fork_info": mainnet_fork_info(era),
+                "attestation": data,
+            }))
+            .unwrap()
+        };
+        let aggregate = aggregate_v1_body(era, true, "0xff03");
+
+        // Attest, then aggregate.
+        let device = device();
+        let key = device.keys()[0];
+        device.sign(&key, &attestation(0x21)).await.unwrap();
+        device.sign(&key, &aggregate).await.unwrap();
+        // A conflicting attestation for the same target is still a double vote.
+        assert_eq!(
+            device.sign(&key, &attestation(0x22)).await.unwrap_err(),
+            DeviceError::SlashingRefused
+        );
+
+        // Aggregate first (as a node may when re-ordering duties), then attest.
+        let device = self::device();
+        let key = device.keys()[1];
+        device.sign(&key, &aggregate).await.unwrap();
+        device.sign(&key, &attestation(0x21)).await.unwrap();
     }
 }

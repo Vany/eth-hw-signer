@@ -1,5 +1,5 @@
 //! The [`DeviceClient`] trait: the interface the router uses to talk to a
-//! signing device (the signing board, an emulator, or a mock).
+//! signing device (hardware wallet, emulator, or mock).
 
 use async_trait::async_trait;
 

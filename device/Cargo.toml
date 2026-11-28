@@ -6,6 +6,12 @@ license.workspace = true
 repository.workspace = true
 description = "Device abstraction layer for signer-router: shared eth2 signing types and the DeviceClient trait"
 
+[features]
+# Test-only constructors (`SoftDevice::from_seed*`, `SlashingProtection::
+# in_memory`: volatile slashing protection). Enabled only from
+# dev-dependencies; never in a release build of the router.
+test-util = []
+
 [dependencies]
 signer-core = { workspace = true }
 serde = { workspace = true }
@@ -14,6 +20,23 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }
 async-trait = "0.1"
+zeroize = { workspace = true, features = ["alloc"] }
+# EIP-2335 keystore decryption (RustCrypto; sha2 0.10 / hmac 0.12 family).
+scrypt = { version = "0.11", default-features = false }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+# `zeroize`: the expanded AES key schedule and the CTR state are wiped on drop.
+aes = { version = "0.8", features = ["zeroize"] }
+ctr = { version = "0.9", features = ["zeroize"] }
+unicode-normalization = "0.1"
 
 [dev-dependencies]
+# Self dev-dependency: this crate's integration tests get `test-util`.
+signer-device = { path = ".", features = ["test-util"] }
 tokio = { version = "1", features = ["macros", "rt"] }
+tempfile = "3"
+proptest = "1"
+# Differential reference for SSZ roots (same versions signer-core tests use).
+tree_hash = "0.12"
+tree_hash_derive = "0.12"
+ssz_types = "0.14.1"
+typenum = "1.20.1"

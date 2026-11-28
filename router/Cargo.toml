@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Web3Signer-compatible remote signer that routes eth2 signing duties to signing boards (STM32U5)"
+description = "Web3Signer-compatible remote signer that routes eth2 signing duties to hardware wallets"
 
 [[bin]]
 name = "signer-router"
@@ -24,10 +24,24 @@ toml = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+zeroize = { workspace = true, features = ["alloc"] }
+thiserror = { workspace = true }
+hex = { workspace = true }
+ureq = { version = "=3.5.2", default-features = false, features = ["rustls"] }
+# O_NOFOLLOW / geteuid for opening secret files (already in the lock tree).
+libc = "=0.2.191"
 
 [dev-dependencies]
+signer-device = { path = "../device", features = ["test-util"] }
+tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 async-trait = "0.1"
-hex = { workspace = true }
 signer-core = { workspace = true }
+proptest = "1"
+# E2: re-wrap test secrets as EIP-2335 keystores (the versions signer-device
+# already uses; no new crate in the lock).
+sha2 = { workspace = true }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+aes = "0.8"
+ctr = "0.9"

@@ -13,12 +13,13 @@
 //!
 //! [blst]: https://crates.io/crates/blst
 
+use alloc::boxed::Box;
 use blst::min_pk::{
     PublicKey as BlstPublicKey, SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
 use blst::BLST_ERROR;
 use core::fmt;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::types::PubKey;
 
@@ -61,12 +62,37 @@ impl SecretKey {
     /// Wrap validated secret-key bytes. The scalar must satisfy
     /// `0 < sk < r`; this crate checks the range itself because blst's
     /// deserializer silently reduces out-of-range scalars modulo `r`.
-    pub fn from_bytes(bytes: [u8; 32]) -> Result<Self, BlsError> {
-        if !crate::eip2333::is_valid_scalar_be(&bytes) {
+    ///
+    /// The bytes are owned by the key at once, so every exit wipes them: on
+    /// a refusal the key is dropped (zeroized), and the by-value argument is
+    /// wiped here. Callers still wipe their own copy.
+    pub fn from_bytes(mut bytes: [u8; 32]) -> Result<Self, BlsError> {
+        let key = Self(bytes);
+        bytes.zeroize();
+        key.validate()?;
+        Ok(key)
+    }
+
+    /// Like [`SecretKey::from_bytes`], but the key is built in its heap
+    /// allocation: the box is allocated zeroed and the bytes are copied
+    /// straight into it, so no `SecretKey` is moved through the stack (as
+    /// `from_bytes(..).map(Box::new)` would, leaving a stale copy behind).
+    /// `bytes` is wiped on every exit, a refused key is dropped (zeroized).
+    pub fn from_bytes_boxed(bytes: &mut [u8; 32]) -> Result<Box<Self>, BlsError> {
+        let mut key = Box::new(Self([0u8; 32]));
+        key.0.copy_from_slice(bytes);
+        bytes.zeroize();
+        key.validate()?;
+        Ok(key)
+    }
+
+    fn validate(&self) -> Result<(), BlsError> {
+        if !crate::eip2333::is_valid_scalar_be(&self.0) {
             return Err(BlsError::InvalidSecretKey);
         }
-        BlstSecretKey::from_bytes(&bytes).map_err(|_| BlsError::InvalidSecretKey)?;
-        Ok(Self(bytes))
+        // The blst key built to validate is itself zeroized on drop.
+        BlstSecretKey::from_bytes(&self.0).map_err(|_| BlsError::InvalidSecretKey)?;
+        Ok(())
     }
 
     /// Raw big-endian bytes.
@@ -91,6 +117,18 @@ impl Drop for SecretKey {
         self.zeroize();
     }
 }
+
+/// The `Drop` above zeroizes: marked so callers can require it.
+impl ZeroizeOnDrop for SecretKey {}
+
+/// Compile-time guard: the secret key zeroizes on drop; fails to build if
+/// that guarantee is removed. (blst's own key, built transiently in
+/// [`SecretKey::blst`], is `#[zeroize(drop)]` in blst 0.3.17 but does not
+/// implement the `ZeroizeOnDrop` marker, so it cannot be guarded here.)
+const _: fn() = || {
+    fn wipes_on_drop<T: ZeroizeOnDrop>() {}
+    wipes_on_drop::<SecretKey>();
+};
 
 impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -193,6 +231,28 @@ mod tests {
         sk.zeroize();
         assert_eq!(*sk.as_bytes(), [0u8; 32]);
         assert!(before != [0u8; 32]);
+    }
+
+    /// K: the boxed constructor gives the same key as `from_bytes`, wipes
+    /// its input on success and on refusal, and refuses what `from_bytes`
+    /// refuses. It checks results only: whether a stack copy of the key is
+    /// made is not observable from a test (that rests on reading the code).
+    #[test]
+    fn from_bytes_boxed_agrees_with_from_bytes_and_wipes_input() {
+        let valid = validator_signing_key(crate::testing::unhex(SEED).as_slice(), 0).unwrap();
+        let mut bytes = valid;
+        let boxed = SecretKey::from_bytes_boxed(&mut bytes).unwrap();
+        assert_eq!(bytes, [0u8; 32], "input wiped after success");
+        assert_eq!(boxed.as_bytes(), test_key().as_bytes());
+
+        for invalid in [[0u8; 32], crate::eip2333::R_BYTES_BE, [0xff; 32]] {
+            let mut bytes = invalid;
+            assert_eq!(
+                SecretKey::from_bytes_boxed(&mut bytes).unwrap_err(),
+                BlsError::InvalidSecretKey
+            );
+            assert_eq!(bytes, [0u8; 32], "input wiped after refusal");
+        }
     }
 
     #[test]

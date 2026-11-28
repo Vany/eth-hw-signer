@@ -16,10 +16,13 @@ use crate::state::{AppState, DeviceId};
 /// Which device backend to instantiate for the ids in the key map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DeviceBackend {
-    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC); logs a warning at startup.
+    /// Deterministic fake signatures (NOT CRYPTOGRAPHIC) — default for M0.
     Mock,
-    /// A board emulator — not implemented yet.
+    /// Trezor/Speculos emulators — not implemented yet (step 3).
     Emulator,
+    /// Real BLS with keys decrypted from EIP-2335 keystores into process
+    /// memory. INSECURE — testnets only (see `soft_backend`).
+    Soft,
 }
 
 /// Load a key-map file and build the [`AppState`] from it.
@@ -27,12 +30,15 @@ pub enum DeviceBackend {
 /// The file must be a flat map of public key → device id, e.g.
 ///
 /// ```toml
-/// "0x<48-byte pubkey as 0x-hex>" = "board-1"
+/// "0x<48-byte pubkey as 0x-hex>" = "trezor-1"
 /// ```
 ///
 /// or the same shape as JSON. The format is picked from the file extension
 /// (`.toml` / `.json`).
 pub fn load_state(key_map: &Path, backend: DeviceBackend) -> Result<AppState, String> {
+    if backend == DeviceBackend::Soft {
+        return Err("--key-map does not apply to the soft backend (use --keystores)".into());
+    }
     let raw = fs::read_to_string(key_map)
         .map_err(|e| format!("cannot read key map {}: {e}", key_map.display()))?;
     let entries = parse_entries(&raw, key_map)?;
@@ -110,6 +116,8 @@ fn build_devices(
         let client: Arc<dyn DeviceClient> = match backend {
             DeviceBackend::Mock => Arc::new(MockDevice::new(keys)),
             DeviceBackend::Emulator => Arc::new(EmulatorDevice::new(device_id.clone())),
+            // Rejected in load_state: soft keys come from keystores.
+            DeviceBackend::Soft => continue,
         };
         devices.insert(device_id.clone(), client);
     }

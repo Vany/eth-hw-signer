@@ -73,6 +73,15 @@ pub struct NetworkSchedule {
 /// Mainnet — consensus-specs `configs/mainnet.yaml` (source in the module
 /// docs). Fork epochs: Altair 74240, Bellatrix 144896, Capella 194048,
 /// Deneb 269568, Electra 364032 (May 7 2025), Fulu 411392 (Dec 3 2025).
+/// Mainnet's genesis validators root
+/// (0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95, as
+/// served by a mainnet beacon node's `/eth/v1/beacon/genesis`). The one copy
+/// shared by the router (which refuses to sign for it) and the tests.
+pub const MAINNET_GENESIS_VALIDATORS_ROOT: [u8; 32] = [
+    0x4b, 0x36, 0x3d, 0xb9, 0x4e, 0x28, 0x61, 0x20, 0xd7, 0x6e, 0xb9, 0x05, 0x34, 0x0f, 0xdd, 0x4e,
+    0x54, 0xbf, 0xe9, 0xf0, 0x6b, 0xf3, 0x3f, 0xf6, 0xcf, 0x5a, 0xd2, 0x7f, 0x51, 0x1b, 0xfe, 0x95,
+];
+
 pub const MAINNET: NetworkSchedule = NetworkSchedule {
     name: "mainnet",
     forks: &[
@@ -177,6 +186,15 @@ pub fn ensure_version_agrees(declared: DataVersion, derived: ForkName) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// C: the shared constant is mainnet's root, byte for byte.
+    #[test]
+    fn mainnet_genesis_validators_root_is_the_mainnet_value() {
+        assert_eq!(
+            format!("0x{}", hex::encode(MAINNET_GENESIS_VALIDATORS_ROOT)),
+            "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
+        );
+    }
 
     fn mk_fork(prev: [u8; 4], current: [u8; 4], epoch: u64) -> Fork {
         serde_json::from_value(serde_json::json!({

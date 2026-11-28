@@ -23,7 +23,7 @@
 //!
 //! # Bounded memory
 //!
-//! A signing board cannot keep every attestation ever signed, so each key
+//! A hardware wallet cannot keep every attestation ever signed, so each key
 //! retains only the `capacity` most recent attestations plus a low watermark.
 //! The watermark starts as the minimum source/target over the retained
 //! entries (exactly EIP-3076 conditions 4/5 for a complete database) and, on

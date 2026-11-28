@@ -1,6 +1,6 @@
-//! Stub device client for a board emulator. Not implemented.
+//! Stub device client for hardware-wallet emulators (Trezor / Speculos).
 //!
-//! Not implemented yet: the transport to the emulators. Until then
+//! TODO(step 3): speak the actual transport to the emulators. Until then
 //! every operation fails with a [`DeviceError::Transport`] error.
 
 use async_trait::async_trait;
@@ -24,7 +24,7 @@ impl EmulatorDevice {
     }
 }
 
-const NOT_IMPLEMENTED: &str = "emulator transport not implemented yet";
+const NOT_IMPLEMENTED: &str = "emulator transport not implemented yet (planned for step 3)";
 
 #[async_trait]
 impl DeviceClient for EmulatorDevice {
@@ -53,7 +53,7 @@ mod tests {
 
     #[tokio::test]
     async fn returns_transport_error() {
-        let dev = EmulatorDevice::new("board-emu-1");
+        let dev = EmulatorDevice::new("trezor-emu-1");
         let err = dev.public_keys().await.unwrap_err();
         assert!(matches!(err, DeviceError::Transport(_)));
     }
