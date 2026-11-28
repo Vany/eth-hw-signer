@@ -1,3 +1,11 @@
+> **Superseded, 2026-11-28: the hot standby is removed from the design.**
+>
+> The question asked in the [Lido forum thread](https://research.lido.fi/t/12227/2), how a standby that takes over avoids signing against what the primary already signed, led us to drop the standby and the arbiter altogether. Every path to slashing in the scheme below needed a second signer of the same key while the first might still be alive; the arbiter, votes, leases and floors existed only to make that safe. The current design has **one key, one board**: a board failure means missed duties, and a stolen or doubtful board means a pre-signed exit, never a second copy of the key. See the README sections [One key, one board](../README.md#one-key-one-board) and [Theft: exit, and why it is safe](../README.md#theft-exit-and-why-it-is-safe).
+>
+> The note below is kept unchanged as the record of the earlier design and its simulation results.
+
+---
+
 # Hot standby without double signing: protocol note and simulation results
 
 Status, 2026-11-25. This note covers the protocol **as designed and as it runs in our software model**: simulated devices, a simulated arbiter, a synthetic beacon chain, and real BLS12-381 signatures checked by an independent checker. The board firmware does not exist yet, and nothing here has run on a physical board. The simulator source is not in this repository yet.
