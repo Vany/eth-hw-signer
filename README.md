@@ -92,7 +92,7 @@ A Discovery kit costs about $90. At ~100 validators per board that is under $1 o
 
 **Done**
 - Internal specification: architecture, device protocol, slashing protection, threat model.
-- Host service: remote-signing API endpoints, signing core with EIP-2333/2334 derivation, EIP-3076 rules, Electra types; 123 tests passing.
+- Host service: remote-signing API endpoints, signing core with EIP-2333/2334 derivation, EIP-3076 rules, Electra types; a software backend with a persistent EIP-3076 slashing database and a Vault key source, used on our Hoodi test stand; 284 tests passing.
 - Firmware proof of concept: BLS signing in an emulator, matching our signing core and an independent reference (signing path only).
 - Software model of the design: simulated boards, key server and chain view, real BLS signatures, an independent slashing checker.
 
@@ -107,29 +107,43 @@ A Discovery kit costs about $90. At ~100 validators per board that is under $1 o
 
 ## Host service: what is in this repository
 
-The host side, in Rust. It does not talk to a board yet: today the signing backends are a mock and a software device for tests.
+The host side, in Rust. It does not talk to a board yet: today the signing backends are a mock and a software device for testnets.
 
 | Crate | What it is |
 |---|---|
 | `core` (`signer-core`) | `no_std` signing core shared with the future firmware: SSZ signing roots, signing domains, EIP-2333/2334 key derivation, EIP-3076 slashing rules, BLS12-381 signing via `blst` |
-| `device` (`signer-device`) | Remote-signing API v1.4 request types, fork schedules (mainnet, Sepolia, Hoodi), the `DeviceClient` trait and backends: `mock` (deterministic, not cryptographic), `soft` (real BLS with keys in plain memory, **testing only**), `emulator` (stub) |
-| `router` (`signer-router`) | The HTTP service: `GET /upcheck`, `GET /api/v1/eth2/publicKeys`, `POST /api/v1/eth2/sign/{identifier}` |
+| `device` (`signer-device`) | Remote-signing API v1.4 request types, fork schedules (mainnet, Sepolia, Hoodi), the `DeviceClient` trait and backends: `mock` (deterministic, not cryptographic), `soft` (real BLS with keys in process memory, a persistent EIP-3076 slashing database, **testnets only**), `emulator` (stub) |
+| `router` (`signer-router`) | The HTTP service ([Ethereum Remote Signing API v1.4](https://github.com/ethereum/remote-signing-api), Web3Signer-compatible): `GET /upcheck`, `GET /api/v1/eth2/publicKeys`, `POST /api/v1/eth2/sign/{identifier}`; key sources for `soft`: EIP-2335 keystores or HashiCorp Vault KV v2 with client-certificate auth; the `vault-put` subcommand imports keystores into Vault |
 
 Build and test (Rust 1.100.0, pinned in `rust-toolchain.toml`; `blst` needs a C compiler):
 
 ```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run -p signer-router -- --help
 ```
 
-The same environment CI uses is a Docker image, built once from `docker/dev.Dockerfile` and rebuilt only when that file or `rust-toolchain.toml` changes. It has the pinned Rust, the Cortex-M33 target (`thumbv8m.main-none-eabihf`) and `arm-none-eabi-gcc`. To run in it:
+`cargo test` needs `vault` (on `PATH`, or `VAULT_BIN`) and `openssl` on `PATH`: the real-Vault tests (`router/tests/vault_real.rs`) start throwaway dev Vaults and make throwaway client certificates. Without them those tests fail; they never pass silently. `SIGNER_ALLOW_SKIP=1` is the explicit opt-out: a missing tool then prints `SKIPPED`, and the run is marked partial, so it is never all green. CI does not set it. One test needs root and is `#[ignore]`d (`other_owner_file_is_refused_as_root`); run it with `sudo cargo test -- --ignored other_owner`.
+
+The same environment CI uses is a Docker image, built once from `docker/dev.Dockerfile` and rebuilt only when that file or `rust-toolchain.toml` changes. It has the pinned Rust, the Cortex-M33 target (`thumbv8m.main-none-eabihf`), `arm-none-eabi-gcc`, `vault` and `openssl`. To run in it:
 
 ```sh
 scripts/dev.sh                                    # cargo test --workspace --locked
 scripts/dev.sh cargo build -p signer-core --target thumbv8m.main-none-eabihf
 ```
 
-`signer-router --device-backend mock --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. `--device-backend` is required. The only working backend today is `mock`, which returns fake signatures and says so in the log (`WARN backend=mock: signatures are FAKE`): it is for wiring tests against a validator client, not for real duties. The mock has no slashing protection. The `soft` device is used by the test suite; never give it real validator keys.
+`signer-router --device-backend <mock|soft|emulator> --key-map <file>` maps `0x`-prefixed public keys to device ids (TOML or JSON) and listens on `127.0.0.1:9000` by default. `--device-backend` is required, so nobody runs the mock by accident:
+
+- `mock` returns fake signatures and says so in the log (`WARN backend=mock: signatures are FAKE`). It is for wiring tests against a validator client, not for real duties, and has no slashing protection.
+- `soft` signs with real BLS keys decrypted into process memory. It needs `--slashing-db <file>` (EIP-3076 interchange, created once with `--slashing-db-create`) and `--genesis-validators-root 0x…`, and it refuses mainnet. **Insecure by design: testnets only, never real validator keys.** It is what runs our Hoodi test stand until a board does.
+- `emulator` is a stub.
+
+`--help` lists every flag.
+
+### Review policy
+
+Development lands on `main` without per-commit review; `main` must pass the checks above. Every release gets a named human review before it is tagged.
 
 ## Limits
 
