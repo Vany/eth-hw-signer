@@ -124,12 +124,12 @@ cargo test --workspace
 cargo run -p signer-router -- --help
 ```
 
-`cargo test` needs `vault` (on `PATH`, or `VAULT_BIN`) and `openssl` on `PATH`: the real-Vault tests (`router/tests/vault_real.rs`) start throwaway dev Vaults and make throwaway client certificates. Without them those tests fail; they never pass silently. `SIGNER_ALLOW_SKIP=1` is the explicit opt-out: a missing tool then prints `SKIPPED`, and the run is marked partial, so it is never all green. CI does not set it. One test needs root and is `#[ignore]`d (`other_owner_file_is_refused_as_root`); run it with `sudo cargo test -- --ignored other_owner`.
+`cargo test` needs `vault` (on `PATH`, or `VAULT_BIN`) and `openssl` on `PATH`: the real-Vault tests (`router/tests/vault_real.rs`) start throwaway dev Vaults and make throwaway client certificates. Without them those tests fail; they never pass silently. `SIGNER_ALLOW_SKIP=1` is the explicit opt-out: a missing tool then prints `SKIPPED`, and the run is marked partial, so it is never all green. CI does not set it. One test needs root and is `#[ignore]`d (`other_owner_file_is_refused_as_root`); run it with `sudo cargo test -- --ignored other_owner`. Some other tests check that file permissions are enforced and refuse to pass as root; `scripts/test.sh` (what CI runs) runs the suite as an unprivileged user and then the root-only test, in a root container.
 
 The same environment CI uses is a Docker image, built once from `docker/dev.Dockerfile` and rebuilt only when that file or `rust-toolchain.toml` changes. It has the pinned Rust, the Cortex-M33 target (`thumbv8m.main-none-eabihf`), `arm-none-eabi-gcc`, `vault` and `openssl`. To run in it:
 
 ```sh
-scripts/dev.sh                                    # cargo test --workspace --locked
+scripts/dev.sh                                    # scripts/test.sh: the test suite as CI runs it
 scripts/dev.sh cargo build -p signer-core --target thumbv8m.main-none-eabihf
 ```
 

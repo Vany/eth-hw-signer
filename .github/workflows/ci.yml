@@ -68,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      - run: rustc --version && cargo test --workspace --locked
+      - run: rustc --version && scripts/test.sh
 
   core-m33:
     name: signer-core for Cortex-M33 (thumbv8m.main-none-eabihf, with BLS)
