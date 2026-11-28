@@ -6,7 +6,7 @@
 //! - [`DeviceClient`]: async interface every signing backend implements.
 //! - Backends: [`mock::MockDevice`] (deterministic, **not cryptographic**),
 //!   [`soft::SoftDevice`] (real BLS, **software keys, testing only**), and
-//!   [`emulator::EmulatorDevice`] (stub, TODO step 3).
+//!   [`emulator::EmulatorDevice`] (stub, TODO).
 
 pub mod client;
 pub mod emulator;

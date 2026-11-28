@@ -1,6 +1,6 @@
 //! Stub device client for a board emulator. Not implemented.
 //!
-//! TODO(step 3): speak the actual transport to the emulators. Until then
+//! TODO: speak the actual transport to the emulators. Until then
 //! every operation fails with a [`DeviceError::Transport`] error.
 
 use async_trait::async_trait;
@@ -24,7 +24,8 @@ impl EmulatorDevice {
     }
 }
 
-const NOT_IMPLEMENTED: &str = "emulator transport not implemented yet (planned for step 3)";
+const NOT_IMPLEMENTED: &str =
+    "emulator transport not implemented yet (planned for a later milestone)";
 
 #[async_trait]
 impl DeviceClient for EmulatorDevice {
